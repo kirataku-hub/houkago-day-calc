@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0284c7">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>放デイ利用実績・利用率計算ツール</title>
+<style>
+:root {
+  --primary:#0284c7; --primary-dark:#0369a1; --bg:#f8fafc; --card-bg:#fff;
+  --text:#1e293b; --text-light:#64748b; --border:#e2e8f0;
+}
+* { box-sizing:border-box; margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+body { background:var(--bg); color:var(--text); padding:16px; line-height:1.5; }
+.container { max-width:600px; margin:0 auto; padding-bottom:40px; }
+header { text-align:center; margin-bottom:20px; }
+h1 { font-size:1.25rem; color:var(--primary-dark); margin-bottom:4px; }
+.subtitle { font-size:.85rem; color:var(--text-light); }
+.card { background:var(--card-bg); border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:16px; border:1px solid var(--border); }
+.form-group { margin-bottom:14px; }
+label { display:block; font-size:.85rem; font-weight:600; margin-bottom:4px; }
+input[type=number], select { width:100%; padding:10px; font-size:1rem; border:1px solid var(--border); border-radius:8px; outline:none; background:white; color:var(--text); }
+input:focus,select:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(2,132,199,.15); }
+.presets { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+.preset-btn { background:#f1f5f9; border:1px solid var(--border); padding:6px 10px; font-size:.75rem; border-radius:6px; cursor:pointer; color:var(--text); }
+.results { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
+.result-box { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px; text-align:center; }
+.result-box.warning { background:#fffbeb; border-color:#fde68a; }
+.result-box.danger { background:#fee2e2; border-color:#fecaca; }
+.result-title { font-size:.75rem; color:var(--text-light); margin-bottom:2px; font-weight:600; }
+.result-value { font-size:1.4rem; font-weight:700; color:var(--primary-dark); }
+.result-sub { font-size:.75rem; color:var(--text-light); }
+.alert-box { margin-top:10px; padding:8px 12px; border-radius:6px; font-size:.8rem; display:none; }
+.alert-box.show { display:block; }
+.alert-warning { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.alert-danger { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+.actions { display:flex; gap:8px; margin-top:12px; }
+button.btn { flex:1; background:var(--primary); color:white; border:none; padding:10px; font-size:.9rem; font-weight:600; border-radius:8px; cursor:pointer; }
+button.btn:hover { background:var(--primary-dark); }
+button.btn-secondary { background:#64748b; }
+button.btn-danger-sub { background:#ef4444; padding:6px 10px; color:white; border:none; border-radius:6px; cursor:pointer; }
+.history-list { margin-top:10px; font-size:.85rem; }
+.history-item { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+.save-status { color:var(--text-light); font-size:.75rem; text-align:center; margin-top:8px; }
+@media (max-width:360px) { body {padding:10px;} .card {padding:12px;} .result-value {font-size:1.2rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>放デイ利用実績計算</h1>
+    <p class="subtitle">入力内容・月次履歴をこの端末のブラウザに保存</p>
+  </header>
+
+  <div class="card">
+    <div class="form-group">
+      <label for="capacity">利用定員（名）</label>
+      <input type="number" id="capacity" value="10" min="1" max="100" step="1">
+      <div class="presets">
+        <button type="button" class="preset-btn" onclick="setCapacity(10)">定員 10</button>
+        <button type="button" class="preset-btn" onclick="setCapacity(15)">定員 15</button>
+        <button type="button" class="preset-btn" onclick="setCapacity(20)">定員 20</button>
+        <button type="button" class="preset-btn" onclick="setCapacity(30)">定員 30</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="days">開所日数（日）</label>
+      <input type="number" id="days" value="20" min="1" max="31" step="1">
+    </div>
+    <div class="form-group">
+      <label for="totalUsers">期間内の延べ利用者数（人）</label>
+      <input type="number" id="totalUsers" value="200" min="0" step="1">
+    </div>
+    <div class="results">
+      <div class="result-box" id="avgBox">
+        <div class="result-title">日平均利用者数</div>
+        <div class="result-value" id="avgResult">10.0</div>
+        <div class="result-sub">人 / 日</div>
+      </div>
+      <div class="result-box" id="rateBox">
+        <div class="result-title">月間利用率</div>
+        <div class="result-value" id="rateResult">100.0</div>
+        <div class="result-sub">%</div>
+      </div>
+    </div>
+    <div id="alertCapacity" class="alert-box alert-warning">⚠️ 日平均が定員（100%）を超えています</div>
+    <div id="alertExcess" class="alert-box alert-danger">🚨 定員超過の基準（150%超）を確認してください</div>
+    <div class="save-status" id="saveStatus" aria-live="polite">入力内容は自動保存されます</div>
+  </div>
+
+  <div class="card">
+    <label for="monthSelect">月次データの保存・履歴</label>
+    <div class="form-group" style="margin-top:8px;">
+      <select id="monthSelect">
+        <option value="4月">4月</option><option value="5月">5月</option><option value="6月">6月</option>
+        <option value="7月">7月</option><option value="8月">8月</option><option value="9月">9月</option>
+        <option value="10月">10月</option><option value="11月">11月</option><option value="12月">12月</option>
+        <option value="1月">1月</option><option value="2月">2月</option><option value="3月">3月</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" onclick="saveRecord()">この月を保存</button>
+      <button class="btn btn-secondary" type="button" onclick="copySummary()">結果コピー</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+
+<script>
+const CURRENT_KEY = 'hug_calc_current';
+const RECORDS_KEY = 'hug_calc_records';
+
+function setCapacity(val) {
+  document.getElementById('capacity').value = val;
+  calculate();
+  saveCurrentState();
+}
+
+function calculate() {
+  const capacity = Math.max(0, parseFloat(document.getElementById('capacity').value) || 0);
+  const days = Math.max(1, parseFloat(document.getElementById('days').value) || 1);
+  const totalUsers = Math.max(0, parseFloat(document.getElementById('totalUsers').value) || 0);
+  const avg = totalUsers / days;
+  const rate = capacity > 0 ? (avg / capacity) * 100 : 0;
+
+  document.getElementById('avgResult').innerText = avg.toFixed(1);
+  document.getElementById('rateResult').innerText = rate.toFixed(1);
+
+  const avgBox = document.getElementById('avgBox');
+  const rateBox = document.getElementById('rateBox');
+  const alertCapacity = document.getElementById('alertCapacity');
+  const alertExcess = document.getElementById('alertExcess');
+
+  alertCapacity.classList.remove('show');
+  alertExcess.classList.remove('show');
+  avgBox.className = 'result-box';
+  rateBox.className = 'result-box';
+
+  if (rate > 150) {
+    avgBox.className = 'result-box danger';
+    rateBox.className = 'result-box danger';
+    alertExcess.classList.add('show');
+  } else if (rate > 100) {
+    avgBox.className = 'result-box warning';
+    rateBox.className = 'result-box warning';
+    alertCapacity.classList.add('show');
+  }
+}
+
+function saveCurrentState() {
+  const state = {
+    capacity: document.getElementById('capacity').value,
+    days: document.getElementById('days').value,
+    totalUsers: document.getElementById('totalUsers').value,
+    month: document.getElementById('monthSelect').value
+  };
+  try {
+    localStorage.setItem(CURRENT_KEY, JSON.stringify(state));
+    document.getElementById('saveStatus').textContent = '✓ 入力内容を自動保存しました';
+  } catch (e) {
+    document.getElementById('saveStatus').textContent = '自動保存できませんでした（ブラウザ設定をご確認ください）';
+  }
+}
+
+function restoreCurrentState() {
+  try {
+    const saved = localStorage.getItem(CURRENT_KEY);
+    if (!saved) return;
+    const state = JSON.parse(saved);
+    if (state.capacity !== undefined) document.getElementById('capacity').value = state.capacity;
+    if (state.days !== undefined) document.getElementById('days').value = state.days;
+    if (state.totalUsers !== undefined) document.getElementById('totalUsers').value = state.totalUsers;
+    if (state.month) document.getElementById('monthSelect').value = state.month;
+  } catch (e) {
+    console.warn('前回の入力内容を復元できませんでした', e);
+  }
+}
+
+function getStorageData() {
+  try {
+    return JSON.parse(localStorage.getItem(RECORDS_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveRecord() {
+  const month = document.getElementById('monthSelect').value;
+  const record = {
+    capacity: document.getElementById('capacity').value,
+    days: document.getElementById('days').value,
+    totalUsers: document.getElementById('totalUsers').value,
+    avg: document.getElementById('avgResult').innerText,
+    rate: document.getElementById('rateResult').innerText
+  };
+  try {
+    const records = getStorageData();
+    records[month] = record;
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+    renderHistory();
+    saveCurrentState();
+    alert(month + 'のデータを端末に保存しました！');
+  } catch (e) {
+    alert('保存できませんでした。ブラウザの保存設定をご確認ください。');
+  }
+}
+
+function deleteRecord(month) {
+  if (!confirm(month + 'のデータを削除しますか？')) return;
+  const records = getStorageData();
+  delete records[month];
+  try {
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+    renderHistory();
+  } catch (e) {
+    alert('削除処理を完了できませんでした。');
+  }
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  list.replaceChildren();
+  const records = getStorageData();
+  const keys = Object.keys(records);
+  if (keys.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--text-light);text-align:center;padding:8px;';
+    empty.textContent = '保存されたデータはありません';
+    list.appendChild(empty);
+    return;
+  }
+  keys.forEach(month => {
+    const r = records[month];
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    const span = document.createElement('span');
+    span.innerHTML = '<strong></strong> (<span></span>日/延べ<span></span>人)<br>平均: <strong></strong>人 (<span></span>%)';
+    const strongs = span.querySelectorAll('strong');
+    const spans = span.querySelectorAll('span');
+    strongs[0].textContent = month;
+    spans[0].textContent = r.days;
+    spans[1].textContent = r.totalUsers;
+    strongs[1].textContent = r.avg;
+    spans[2].textContent = r.rate;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-danger-sub';
+    button.textContent = '削除';
+    button.addEventListener('click', () => deleteRecord(month));
+    div.append(span, button);
+    list.appendChild(div);
+  });
+}
+
+async function copySummary() {
+  const avg = document.getElementById('avgResult').innerText;
+  const rate = document.getElementById('rateResult').innerText;
+  const days = document.getElementById('days').value;
+  const total = document.getElementById('totalUsers').value;
+  const summary = `【放デイ利用実績】\\n開所日数: ${days}日\\n延べ利用者数: ${total}人\\n日平均利用者数: ${avg}人\\n利用率: ${rate}%`;
+  try {
+    await navigator.clipboard.writeText(summary);
+    alert('計算結果をコピーしました！');
+  } catch (e) {
+    window.prompt('下の結果をコピーしてください', summary);
+  }
+}
+
+document.querySelectorAll('input').forEach(input => {
+  input.addEventListener('input', () => {
+    calculate();
+    saveCurrentState();
+  });
+});
+document.getElementById('monthSelect').addEventListener('change', saveCurrentState);
+
+// 起動時に前回状態を読み込み、その値で再計算
+restoreCurrentState();
+calculate();
+renderHistory();
+</script>
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('オフライン対応の登録に失敗:', err));
+  });
+}
+</script>
+</body>
+</html>
